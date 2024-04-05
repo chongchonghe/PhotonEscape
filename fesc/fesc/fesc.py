@@ -16,7 +16,7 @@ from .utils import QVacca, mass_to_lifetime
 DEBUG = 0
 
 
-def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
+def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nsample, H_fraction, He_fraction, seed=None):
     """
     Args:
     -----
@@ -26,7 +26,7 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
         The stars positions. The shape is (nstars, 3)
     nsidePow: int
         The nsidePow of healpy. The total number of pixels will be 12 * 4^nsidePow
-    nMC: int
+    nsample: int
         The number of Monte Carlo sampling points
         
     Returns:
@@ -43,6 +43,9 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
 
     assert stars.ndim == 2, "stars must be a numpy array with 2 dimensions"
     assert stars.shape[1] == 3, "stars must be a numpy array with 2 dimensions, and the second dimension must be 3"
+
+    if seed is not None:
+        np.random.seed(seed)
 
     # unit
     t = ro.info['time'] * ro.info['unit_time'].express(C.Myr)
@@ -81,8 +84,7 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
     phi = angles[:, 1]
 
     # count total sample points
-    Nsample = nMC
-    tot_sample = nstars * Npixel * nMC
+    tot_sample = nstars * Npixel * nsample
 
     # output container
     meanDenHI = np.zeros((nstars, Npixel))  # Neutral H column density
@@ -90,16 +92,16 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
     meanDenHeII = np.zeros((nstars, Npixel))  # Column density of HeII
 
     maximum_points = int(1e8) # total memory: 800 MB
-    num_of_stars_per_loop = min(int(maximum_points / (Npixel * nMC)), nstars)
+    num_of_stars_per_loop = min(int(maximum_points / (Npixel * nsample)), nstars)
     assert num_of_stars_per_loop > 0, (f"num_of_star_per_loop must be greater than 0. nstars "
-                                       "= {nstars}, Npixel = {Npixel}, nMC = {nMC}")
+                                       "= {nstars}, Npixel = {Npixel}, nsample = {nsample}")
 
     count_start = 0
     count_end = num_of_stars_per_loop
     while count_start < nstars:
         num_of_stars_in_group = count_end - count_start
 
-        points = np.zeros([num_of_stars_in_group, Npixel, Nsample, 3])
+        points = np.zeros([num_of_stars_in_group, Npixel, nsample, 3])
 
         # loop over stars
         for i_star in range(num_of_stars_in_group):
@@ -109,13 +111,13 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
             for i_pixel in range(Npixel):
                 itheta = theta[i_pixel]
                 iphi = phi[i_pixel]
-                radius = np.random.random(Nsample) * (radius_end - star_surf) + star_surf
+                radius = np.random.random(nsample) * (radius_end - star_surf) + star_surf
                 points[i_star, i_pixel, :, 0] = radius * sin(itheta) * cos(iphi) + rad_center[0]
                 points[i_star, i_pixel, :, 1] = radius * sin(itheta) * sin(iphi) + rad_center[1]
                 points[i_star, i_pixel, :, 2] = radius * cos(itheta) + rad_center[2]
         
         # reshape points
-        tot_points_in_group = num_of_stars_in_group * Npixel * Nsample
+        tot_points_in_group = num_of_stars_in_group * Npixel * nsample
         dots = points.reshape((tot_points_in_group, 3))
 
         # read the hydro data
@@ -123,28 +125,28 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
             sys.stdout = open(os.devnull, "w")
             sp = sample_points(source, dots)
             rho = sp.fields['rho']
-            xHII = sp.fields['xHII']
-            xHeII = sp.fields['xHeII']
-            xHeIII = sp.fields['xHeIII']
+            xHII = sp.fields['xHII'] * H_fraction
+            xHeII = sp.fields['xHeII'] * He_fraction
+            xHeIII = sp.fields['xHeIII'] * He_fraction
             sys.stdout = sys.__stdout__
         else:
             # test 1
             # rho = np.ones(tot_points_in_group) * 1e-3
             # test 2
             # rho = np.ones(tot_points_in_group) * 1e-3
-            # rho[20*Nsample:21*Nsample] = 1e9
+            # rho[20*nsample:21*nsample] = 1e9
             # test 3
             rho = np.ones(tot_points_in_group) * 1e-3
             if count_start == 0:
-                rho[20*Nsample:21*Nsample] = 1e9
+                rho[20*nsample:21*nsample] = 1e9
             xHII = np.zeros(tot_points_in_group)
             xHeII = np.zeros(tot_points_in_group)
             xHeIII = np.zeros(tot_points_in_group)
 
         assert xHII.max() <= 1.0, f"xHII.max() = {xHII.max()}"
         assert xHII.min() >= 0.0, f"xHII.min() = {xHII.min()}"
-        xHI = 1.0 - xHII
-        xHeI = 1.0 - xHeII - xHeIII
+        xHI = H_fraction - xHII
+        xHeI = He_fraction - xHeII - xHeIII
 
         # Set the density of the dots outside the box to 0
         for i in range(3):
@@ -155,8 +157,8 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nMC):
         for i_star in range(num_of_stars_in_group):
             i_star_global = count_start + i_star
             for i_pixel in range(Npixel):
-                idx_1 = (i_star * Npixel + i_pixel) * Nsample
-                idx_2 = (i_star * Npixel + i_pixel + 1) * Nsample
+                idx_1 = (i_star * Npixel + i_pixel) * nsample
+                idx_2 = (i_star * Npixel + i_pixel + 1) * nsample
                 meanDenHI[i_star_global, i_pixel] = np.mean(rho[idx_1:idx_2] * xHI[idx_1:idx_2])
                 meanDenHeI[i_star_global, i_pixel] = np.mean(rho[idx_1:idx_2] * xHeI[idx_1:idx_2])
                 meanDenHeII[i_star_global, i_pixel] = np.mean(rho[idx_1:idx_2] * xHeII[idx_1:idx_2])
@@ -212,7 +214,7 @@ def compute_weighted_fesc(tau, weights):
     return fesc_weighted
 
 
-def plot_sky(fesc, vmin=-2, vmax=0, is_log=True):
+def plot_sky(fesc, vmin=-2, vmax=0, is_log=True, fn="./sky"):
     
     if is_log:
         z = np.log10(fesc)
@@ -220,10 +222,14 @@ def plot_sky(fesc, vmin=-2, vmax=0, is_log=True):
         z = fesc
 
     sky_im_arr = hp.mollview(z, min=vmin, max=vmax, return_projected_map=1)
-    plt.savefig("sky-healpy.png", dpi=300)
+    plt.savefig(f"{fn}-healpy.png", dpi=300)
 
     f, ax = plt.subplots()
-    im = ax.imshow(sky_im_arr, cmap='viridis', vmin=vmin, vmax=vmax)
+    cmap = plt.cm.viridis
+    cmap.set_under('k')
+    # cmap.set_bad('k')
+    im = ax.imshow(sky_im_arr, cmap=cmap, vmin=vmin, vmax=vmax)
+
     # adjust ax and add a colorbar on the bottom
     f.subplots_adjust(bottom=0.1, top=0.98, left=0.02, right=0.98)
     # hide the axes
@@ -233,7 +239,7 @@ def plot_sky(fesc, vmin=-2, vmax=0, is_log=True):
     cb.ax.tick_params(labelsize='small')
     cb.ax.minorticks_on()
     cb.set_label(r"$\log_{10} f_{\rm esc}(\vec{\theta})$", fontdict={'size':'medium'},)
-    f.savefig("sky-matplotlib.png", dpi=300)
+    f.savefig(f"{fn}-matplotlib.png", dpi=300)
     return
 
 
