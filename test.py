@@ -6,6 +6,9 @@ from pymses import RamsesOutput
 from pymses.analysis import sample_points
 from time import time
 from pymses.utils import constants as C
+import yt
+from yt.funcs import mylog
+mylog.setLevel(40)
 
 from fesc import fesc
 
@@ -15,16 +18,20 @@ fesc.DEBUG = DEBUG
 
 def test_and_benchmark():
 
-    Aquarius_dir = "./data/Aquarius"
-    if not os.path.exists(Aquarius_dir):
-        os.makedirs(Aquarius_dir, exist_ok=True)
-        print("Aquarius data not found. Do you want to download it (900MB)? (y/n)")
-        if input().lower() == "y":
-            os.system("wget http://irfu.cea.fr/Projets/coast_documents/Aquarius.tar.gz -O ./data/Aquarius.tar.gz")
-            os.system("tar -xzf ./data/Aquarius.tar.gz -C ./data")
+    # Aquarius_dir = "./data/Aquarius"
+    # if not os.path.exists(Aquarius_dir):
+    #     os.makedirs(Aquarius_dir, exist_ok=True)
+    #     print("Aquarius data not found. Do you want to download it (900MB)? (y/n)")
+    #     if input().lower() == "y":
+    #         os.system("wget http://irfu.cea.fr/Projets/coast_documents/Aquarius.tar.gz -O ./data/Aquarius.tar.gz")
+    #         os.system("tar -xzf ./data/Aquarius.tar.gz -C ./data")
+    # jobdir = os.path.join(Aquarius_dir, "output")
+    # out = 193
 
-    jobdir = os.path.join(Aquarius_dir, "output")
-    out = 193
+    jobdir = "data/cluster"
+    out = 273
+    if not os.path.exists(f"{jobdir}/output_{out:05d}"):
+        sys.exit(f"Error: {jobdir}/output_{out:05d} does not exist. Please place the data there first (or symbolic link to the data folder)")
 
     try:
         ro = RamsesOutput(jobdir, out)
@@ -66,13 +73,13 @@ def test_and_benchmark():
     dots[:, 2] = np.linspace(0.1, 0.9, N, endpoint=True)
     t1 = time()
     sp = sample_points(source, dots)
-    print(f"N = {N}, linear sequential sample, Time taken: ", time() - t1, "s")
+    print(f"N = {N:.1e}, linear sequential sample, Time taken: ", time() - t1, "s")
 
     N = 10000000
     dots = np.random.random((N, 3))
     t1 = time()
     sp = sample_points(source, dots)
-    print(f"N = {N}, random sample, Time taken: ", time() - t1, "s")
+    print(f"N = {N:.1e}, random sample, Time taken: ", time() - t1, "s")
 
     print("Test passed.")
 
@@ -137,7 +144,8 @@ def test_chongchong():
     #-----  compute column density  -----
     sampleNum = 100
     nsidePow = 2
-    col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(ro, stars, nsidePow=nsidePow, nMC=sampleNum)
+    col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(ro, stars, nsidePow=nsidePow, nsample=sampleNum,
+                                                                H_fraction=0.76, He_fraction=0.24, seed=333)
     col1 = np.mean(col_1, axis=0) # average over stars
     print("\nThe column density, averaged over stars, has the following min, max, and mean values (g cm^-2) across the space:")
     print(col1.min(), col1.max(), col1.mean())
@@ -146,9 +154,8 @@ def test_chongchong():
     #----- compute the escape fraction for all directions from all stars  -----
     sigma = 6.304e-18
     mH = 1.6733e-24
-    hydrogenFrac = 0.76
     kappa = sigma / mH  # cm^2/g
-    tau1 = col_1 * hydrogenFrac * kappa
+    tau1 = col_1 * kappa
     print("tau has the following min, max, and mean values:")
     print(tau1.min(), tau1.max(), tau1.mean())
     fesc1 = np.exp(-tau1)
@@ -167,12 +174,95 @@ def test_chongchong():
 
     #----- plot the sky map  -----
     fesc1_weighted = np.dot(weights, fesc1) / np.sum(weights)
-    fesc.plot_sky(fesc1_weighted, vmin=-2, vmax=0, is_log=True)
+    fesc.plot_sky(fesc1_weighted, vmin=-2, vmax=0, is_log=True, fn="./sky-chongchong")
+
+    return
+
+
+def test_cluster():
+
+    jobdir = "data/cluster"
+    out = 273
+
+    if not os.path.exists(jobdir):
+        sys.exit(f"Error: {jobdir} does not exist. This test is designed for ChongChong running on his own computer.")
+
+    cell_fields = [
+        "Density",
+        "x-velocity",
+        "y-velocity",
+        "z-velocity",
+        "Pressure",
+        "Metallicity",
+        # "dark_matter_density",
+        "xHI",
+        "xHII",
+        "xHeII",
+        "xHeIII",
+    ]
+    epf = [
+        ("particle_family", "b"),
+        ("particle_tag", "b"),
+        ("particle_birth_epoch", "d"),
+        ("particle_metallicity", "d"),
+    ]
+    f1 = f"{jobdir}/output_{out:05d}/info_{out:05d}.txt"
+    # f2 = "output_00274/info_00274.txt"
+    pre_sfc_ds = yt.load(f1, fields=cell_fields, extra_particle_fields=epf)
+    # ad_psfc = pre_sfc_ds.all_data()
+    print("snapshot 00273 current time", pre_sfc_ds.current_time.in_units("Myr"))
+    pre_rhomax, pre_xyz = pre_sfc_ds.find_max(("gas", "density"))
+    print("about to form star cluster at", pre_xyz.to("pc"), "with density", pre_rhomax)
+
+    stars = np.array([(pre_xyz / pre_sfc_ds.length_unit).value])
+    print("star locations =", stars)
+
+    ro = RamsesOutput(jobdir, out)
+
+    # test
+    if DEBUG > 0:
+        stars = np.ones((10, 3)) * 0.9
+        star_mass = np.ones(10) * 10.0
+        is_alive = np.ones(10, dtype=bool)
+
+    #-----  compute column density  -----
+    sampleNum = 100
+    nsidePow = 0
+    col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(ro, stars, nsidePow=nsidePow, nsample=sampleNum, 
+                                                                H_fraction=0.76, He_fraction=0.24, seed=333)
+    col1 = np.mean(col_1, axis=0) # average over stars
+    print("\nThe column density, averaged over stars, has the following min, max, and mean values (g cm^-2) across the space:")
+    print(col1.min(), col1.max(), col1.mean())
+    print("and the following shapes:", col1.shape)
+
+    #----- compute the escape fraction for all directions from all stars  -----
+    sigma = 6.304e-18
+    mH = 1.6733e-24
+    kappa = sigma / mH  # cm^2/g
+    tau1 = col_1 * kappa
+    print("tau has the following min, max, and mean values:")
+    print(tau1.min(), tau1.max(), tau1.mean())
+    fesc1 = np.exp(-tau1)
+    log_fesc1 = - tau1 / np.log(10)
+    print("log10(fesc) has the following min, max, and mean values:")
+    print(log_fesc1.min(), log_fesc1.max(), log_fesc1.mean())
+
+    #----- Computed luminosity weighted escape fraction  -----
+    # luminosity = fesc.QVacca(star_mass)
+    # weights = luminosity * 1e-44
+    weights = np.ones(stars.shape[0])
+    fesc_weighted = fesc.compute_weighted_fesc(tau1, weights)
+    print(f"The luminosity weighted escape fraction is {fesc_weighted}")
+
+    #----- plot the sky map  -----
+    fesc1_sky_weighted = np.dot(weights, fesc1) / np.sum(weights)
+    fesc.plot_sky(fesc1_sky_weighted, vmin=-2, vmax=0, is_log=True, fn="./sky-cluster")
 
     return
 
 
 if __name__ == "__main__":
     
-    test_and_benchmark()
+    # test_and_benchmark()
     # test_chongchong()
+    test_cluster()
