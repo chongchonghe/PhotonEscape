@@ -46,9 +46,12 @@ echo "export PYTHONPATH=\$PYTHONPATH:$PYMSESDIR/pymses_python3"
 
 4. Run the test in this folder: `python test.py`
 
-5. To use this module in your script, add `./fesc` to `PYTHONPATH` by `export PYTHONPATH=$PYTHONPATH:PATH-TO-THIS-REPO/fesc`. Then, you can write script like in test.py. 
+5. To use this module in your script, add the `./src` folder to `PYTHONPATH` by `export PYTHONPATH=$PYTHONPATH:PATH-TO-THIS-REPO/src`. Then, you can write script like in test.py. Or, I have written a script `loop_fred_sims.py` to post process Fred's simulation. Run `python loop_fred_sims.py -h` for help message. 
 
 ## About the fields
 
 In my code, I assumed rho(xHI) + rho(xHII) = rho
 
+## Things to check
+
+- Check the ionization cross sections in the beginning of fesc.py. I might be wrong. 

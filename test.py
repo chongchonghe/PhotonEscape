@@ -208,28 +208,33 @@ def test_cluster():
     ]
     f1 = f"{jobdir}/output_{out:05d}/info_{out:05d}.txt"
     # f2 = "output_00274/info_00274.txt"
-    pre_sfc_ds = yt.load(f1, fields=cell_fields, extra_particle_fields=epf)
-    # ad_psfc = pre_sfc_ds.all_data()
-    print("snapshot 00273 current time", pre_sfc_ds.current_time.in_units("Myr"))
-    pre_rhomax, pre_xyz = pre_sfc_ds.find_max(("gas", "density"))
-    print("about to form star cluster at", pre_xyz.to("pc"), "with density", pre_rhomax)
+    ds = yt.load(f1, fields=cell_fields, extra_particle_fields=epf)
+    ad = ds.all_data()
+    print("snapshot 00273 current time", ds.current_time.in_units("Myr"))
 
-    stars = np.array([(pre_xyz / pre_sfc_ds.length_unit).value])
-    print("star locations =", stars)
+    # pre_rhomax, pre_xyz = ds.find_max(("gas", "density"))
+    # print("about to form star cluster at", pre_xyz.to("pc"), "with density", pre_rhomax)
+    # stars = np.array([(pre_xyz / ds.length_unit).value])
+    # print("star locations =", stars)
 
-    ro = RamsesOutput(jobdir, out)
-
-    # test
+    star_mass = ad["star", "particle_mass"].in_units("Msun")
+    star_pos = ad["star", "particle_position"].in_units("code_length")
+    star_pos = star_pos.value
+    # print(star_mass)
+    # print(star_pos)
     if DEBUG > 0:
-        stars = np.ones((10, 3)) * 0.9
+        star_pos = np.ones((10, 3)) * 0.9
         star_mass = np.ones(10) * 10.0
         is_alive = np.ones(10, dtype=bool)
+
+    #----- Loading output using Pymses  -----
+    ro = RamsesOutput(jobdir, out)
 
     #-----  compute column density  -----
     sampleNum = 100
     nsidePow = 0
-    col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(ro, stars, nsidePow=nsidePow, nsample=sampleNum, 
-                                                                H_fraction=0.76, He_fraction=0.24, seed=333)
+    col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(
+        ro, star_pos, nsidePow=nsidePow, nsample=sampleNum, H_fraction=0.76, He_fraction=0.24, seed=333)
     col1 = np.mean(col_1, axis=0) # average over stars
     print("\nThe column density, averaged over stars, has the following min, max, and mean values (g cm^-2) across the space:")
     print(col1.min(), col1.max(), col1.mean())
@@ -250,7 +255,7 @@ def test_cluster():
     #----- Computed luminosity weighted escape fraction  -----
     # luminosity = fesc.QVacca(star_mass)
     # weights = luminosity * 1e-44
-    weights = np.ones(stars.shape[0])
+    weights = np.ones(star_pos.shape[0])
     fesc_weighted = fesc.compute_weighted_fesc(tau1, weights)
     print(f"The luminosity weighted escape fraction is {fesc_weighted}")
 

@@ -16,16 +16,24 @@ from .utils import QVacca, mass_to_lifetime
 DEBUG = 0
 
 
-def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nsample, H_fraction, He_fraction, seed=None):
+Sigma_HI = 6.304e-18    # cm^2
+MH = 1.6733e-24         # g
+Kappa_HI = Sigma_HI / MH
+Kappa_HeI = Kappa_HI * (24.6 / 13.6)**-3
+Kappa_HeII = Kappa_HI * (54.4 / 13.6)**-3
+OPACITIES = {"HI": Kappa_HI, "HeI": Kappa_HeI, "HeII": Kappa_HeII}
+
+
+def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine, nsample, H_fraction, He_fraction, seed=None):
     """
     Args:
     -----
     ro: pymses.RamsesOutput
         The RamsesOutput object
     stars: np.ndarray
-        The stars positions. The shape is (nstars, 3)
-    nsidePow: int
-        The nsidePow of healpy. The total number of pixels will be 12 * 4^nsidePow
+        The stars positions normalized to [0, 1] across the simulation box. The shape is (nstars, 3)
+    n_angular_refine: int
+        The total number of pixels will be 12 * 4^n_angular_refine.
     nsample: int
         The number of Monte Carlo sampling points
         
@@ -41,8 +49,8 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nsample, H
     
     """
 
-    assert stars.ndim == 2, "stars must be a numpy array with 2 dimensions"
-    assert stars.shape[1] == 3, "stars must be a numpy array with 2 dimensions, and the second dimension must be 3"
+    assert star_pos.ndim == 2, "stars must be a numpy array with 2 dimensions"
+    assert star_pos.shape[1] == 3, "stars must be a numpy array with 2 dimensions, and the second dimension must be 3"
 
     if seed is not None:
         np.random.seed(seed)
@@ -53,14 +61,14 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nsample, H
     unit_l = ro.info['unit_length']
     unit_d = ro.info['unit_density']
     unit_col_den = (unit_l * unit_d).express(C.cm**(-2) * C.g)
-    nstars = stars.shape[0]
+    nstars = star_pos.shape[0]
 
-    print("\nCalculating the following snapshot:")
-    print(f"jobdir = {ro.output_repos}")
-    print(f"iout = {ro.iout}")
-    print(f"unit_l = {unit_l}, unit_d = {unit_d}, unit_col_den = {unit_col_den} cm-2 g")
-    print(f"time = {ro.info['time']} = {t} Myr")
-    print(f"Number of stars = {nstars}")
+    # print("\nCalculating the following snapshot:")
+    # print(f"jobdir = {ro.output_repos}")
+    # print(f"iout = {ro.iout}")
+    # print(f"unit_l = {unit_l}, unit_d = {unit_d}, unit_col_den = {unit_col_den} cm-2 g")
+    # print(f"time = {ro.info['time']} = {t} Myr")
+    # print(f"Number of stars = {nstars}")
 
     # star_surf = 5.1 * 1. / 2**level_refine
     star_surf = 0.0
@@ -76,7 +84,7 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nsample, H
     source = ro.amr_source(["rho", "xHII", "xHeII", "xHeIII"])
 
     # healpy stuff
-    nside = 2**nsidePow            # nside = 2**integer
+    nside = 2**n_angular_refine            # nside = 2**integer
     Npixel = hp.nside2npix(nside)   # 12 * nside**2
     angles = pl.pix2ang(nside, np.arange(Npixel))
     angles = np.array(angles).transpose()  # [*, 2]
@@ -106,7 +114,7 @@ def col_den_all_stars_and_directions(ro, stars: np.ndarray, nsidePow, nsample, H
         # loop over stars
         for i_star in range(num_of_stars_in_group):
             i_star_global = count_start + i_star
-            rad_center = stars[i_star_global, :]
+            rad_center = star_pos[i_star_global, :]
             # loop over directions
             for i_pixel in range(Npixel):
                 itheta = theta[i_pixel]
@@ -251,7 +259,7 @@ def arg_parser():
     # parser.add_argument("outputID", type=int, help="output_#####")
     # parser.add_argument("starID", type=int, help="The star ID")
     parser.add_argument("nsample", type=int, help="Number of Monte Carlo sampling points")
-    parser.add_argument("nsidePow", type=int, help="The number of spatial directions will be 12 * 4^nsidePow")
+    parser.add_argument("refine", type=int, help="The number of spatial directions will be 12 * 4^refine")
     # parser.add_argument("all_H", type=bool, help="False: calculate the neutral hydrogen column density")
     return parser.parse_args()    
 
