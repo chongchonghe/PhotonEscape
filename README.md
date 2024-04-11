@@ -46,7 +46,9 @@ echo "export PYTHONPATH=\$PYTHONPATH:$PYMSESDIR/pymses_python3"
 
 4. Run the test in this folder: `python test.py`
 
-5. To use this module in your script, add the `./src` folder to `PYTHONPATH` by `export PYTHONPATH=$PYTHONPATH:PATH-TO-THIS-REPO/src`. Then, you can write script like in test.py. Or, I have written a script `loop_fred_sims.py` to post process Fred's simulation. Run `python loop_fred_sims.py -h` for help message. 
+5. To use this module in your script. Then, add the `./src` folder to `PYTHONPATH` by `export PYTHONPATH=$PYTHONPATH:PATH-TO-THIS-REPO/src`. Then, you can write script like in test.py. Or, use the script I wrote, `loop_fred_sims.py`, to fast-process Fred's simulation. Run `python loop_fred_sims.py -h` for help message. The general routine is to do `python loop_fred_sims.py process path-to-sim-data` followed by `python loop_fred_sims.py fesc path-to-sim-data`. You can copy loop_fred_sims.py to your folder and do your own tweaking. 
+
+6. Note: you need to copy pymses_field_descrs.py to your working folder in order to let Pymses read the right fields. 
 
 ## About the fields
 
