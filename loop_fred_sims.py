@@ -9,6 +9,7 @@ from pymses.utils import constants as C
 import argparse
 import yt
 from yt.funcs import mylog
+from unyt import cm, unyt_quantity
 mylog.setLevel(40)
 
 from fesc import fesc
@@ -25,7 +26,10 @@ def arg_parser():
     parser.add_argument("--output", type=int, nargs="?", help="the output to process. Default: all outputs in the jobdir")
     parser.add_argument("--nsample", type=int, nargs="?", default=100, help="Number of Monte Carlo sampling points for each light beam. Default: 100")
     parser.add_argument("--refine", type=int, nargs="?", default=0, help="The number of spatial directions will be 12 * 4^refine. Default: 0")
-    return parser.parse_args()    
+    parser.add_argument("--dist", type=str, nargs="?", default="1", help="The distance to do ray tracing. Dimensionless numbers will be the fraction to the box size. Default: 1. Examples: '1', '1.5_kpc'")
+    parser.add_argument("--subsample", type=float, default=1.0, help="Sub-sampling fraction for the star particles. Default: 1.0")
+    parser.add_argument("--max_samples", type=int, default=int(1e8), help="The maximum number of samples to do per process. The default is 1e8, which results in 3.2 GB memory usage per process. Increasing this number will increase the speed but also the memory usage linearly.")
+    return parser.parse_args()
 
 
 def process_outputs(args):
@@ -74,7 +78,6 @@ def process_outputs(args):
         infopath = f"{jobdir}/output_{out:05d}/info_{out:05d}.txt"
         ds = yt.load(infopath, fields=cell_fields, extra_particle_fields=epf)
         ad = ds.all_data()
-        print(f"\nProcessing snapshot {out:05d}, current time", ds.current_time.in_units("Myr"))
 
         #----- Read star positions and masses  -----
         star_mass = ad["star", "particle_mass"].in_units("Msun")
@@ -85,18 +88,38 @@ def process_outputs(args):
         if n_star == 0:
             continue
 
-        #----- Loading output using Pymses  -----
-        ro = RamsesOutput(jobdir, out)
+        assert args.subsample <= 1.0, "Error: subsample must be less than or equal to 1.0"
+        if args.subsample < 1.0:
+            n_star_pick = int(n_star * args.subsample)
+            # pick n_star_pick integers from 0 to n_star-1 
+            idx = np.random.choice(n_star, n_star_pick, replace=False)
+            star_mass = star_mass[idx]
+            star_pos = star_pos[idx, :]
+
+        t = ds.current_time.in_units("Myr")
+        print(f"\nProcessing snapshot {out:05d}, current time: {t:.2f} Myri, number of stars processed: {len(star_mass)}")
+
+        # parse the distance: if it is a number, it is the fraction of the box size, otherwise it is number_unit
+        try:
+            dist = float(args.dist)
+        except:
+            assert args.dist.count("_") == 1, "Error: distance must be a number or a number_unit"
+            quant = args.dist.replace("_", " ")
+            dist = unyt_quantity.from_string(quant) / ds.domain_width[0]
+            dist = dist.value
         
         #----- compute column density  -----
+        ro = RamsesOutput(jobdir, out)
         sampleNum = args.nsample
         refine = args.refine
-        print("Processing output", out, "with", sampleNum, "samples and", refine, "levels of angular refinement.")
+        n_directions = 12 * 4**refine
+        print("Processing output", out, "with", sampleNum, "samples and", n_directions, "angular directions")
         t0 = time()
         col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(
-            ro, star_pos, n_angular_refine=refine, nsample=sampleNum, H_fraction=0.76, He_fraction=0.24, seed=333)
+            ro, star_pos, n_angular_refine=refine, nsample=sampleNum, H_fraction=0.76, He_fraction=0.24, 
+            ray_start=0.0, ray_end=dist, seed=333)
         dt = time() - t0
-        print(f"Time taken = {dt:.2f} s")
+        print(f"Done processing. Time taken = {dt:.2f} s")
 
         #----- compute the escape fraction for all directions from all stars  -----
         kappa_HI = fesc.OPACITIES["HI"]
@@ -113,7 +136,8 @@ def process_outputs(args):
         outdir = f"{jobdir}/processed/fesc"
         os.makedirs(outdir, exist_ok=True)
         outpath = f"{outdir}/fesc_{out:05d}.npz"
-        np.savez(outpath, fesc_HI=fesc_HI, fesc_HeI=fesc_HeI, fesc_HeII=fesc_HeII)
+        # save: the escape fraction for all stars and all directions; star masses (Msun); star positions (code_length)
+        np.savez(outpath, fesc_HI=fesc_HI, fesc_HeI=fesc_HeI, fesc_HeII=fesc_HeII, star_mass=star_mass, star_pos=star_pos)
     
     return
 
@@ -136,9 +160,9 @@ def compute_fesc(args):
         sys.exit(f"Error: no output found in {jobdir}")
     outs.sort()
     if len(outs) <= 103:
-        print("Found the following outputs:", outs)
+        print("\nFound the following outputs:", outs)
     else:
-        print("Found the following outputs:", outs[:100], "...", outs[-3:])
+        print("\nFound the following outputs:", outs[:100], "...", outs[-3:])
 
     for out in outs:
         outpath = f"{jobdir}/processed/fesc/fesc_{out:05d}.npz"
@@ -176,6 +200,9 @@ if __name__ == "__main__":
         process_outputs(Args)
     elif Args.task == "fesc":
         compute_fesc(Args)
+    elif Args.task == "process_and_fesc":
+        process_outputs(Args)
+        compute_fesc(Args)
     else:
-        sys.exit("Error: task must be either 'process' or 'fesc'")
+        sys.exit("Error: task must be either 'process' or 'fesc' or 'process_and_fesc'")
     print("\nDone.")

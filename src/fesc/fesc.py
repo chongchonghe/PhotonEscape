@@ -24,7 +24,8 @@ Kappa_HeII = Kappa_HI * (54.4 / 13.6)**-3
 OPACITIES = {"HI": Kappa_HI, "HeI": Kappa_HeI, "HeII": Kappa_HeII}
 
 
-def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine, nsample, H_fraction, He_fraction, seed=None):
+def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine, nsample, H_fraction, He_fraction, seed=None,
+                                     num_of_points_per_process=1e8, ray_start=0.0, ray_end=1.0):
     """
     Args:
     -----
@@ -51,12 +52,12 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
 
     assert star_pos.ndim == 2, "stars must be a numpy array with 2 dimensions"
     assert star_pos.shape[1] == 3, "stars must be a numpy array with 2 dimensions, and the second dimension must be 3"
+    assert H_fraction + He_fraction <= 1.0, "H_fraction + He_fraction must be less than or equal to 1.0"
 
     if seed is not None:
         np.random.seed(seed)
 
     # unit
-    t = ro.info['time'] * ro.info['unit_time'].express(C.Myr)
     boxlen = np.double(ro.info['boxlen'])
     unit_l = ro.info['unit_length']
     unit_d = ro.info['unit_density']
@@ -67,19 +68,13 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
     # print(f"jobdir = {ro.output_repos}")
     # print(f"iout = {ro.iout}")
     # print(f"unit_l = {unit_l}, unit_d = {unit_d}, unit_col_den = {unit_col_den} cm-2 g")
+    # t = ro.info['time'] * ro.info['unit_time'].express(C.Myr)
     # print(f"time = {ro.info['time']} = {t} Myr")
     # print(f"Number of stars = {nstars}")
 
-    # star_surf = 5.1 * 1. / 2**level_refine
-    star_surf = 0.0
-    # radius_end = .5  # boxlen = 1, radius = 0.5
-    # radius_end = 1.0            # v6
-    # radius_end = 0.5            # v7
-    radius_end = 1.0            # v10
-
     # For debugging purpose only
     if DEBUG > 0:
-        radius_end = 0.1
+        ray_end = 0.1
 
     source = ro.amr_source(["rho", "xHII", "xHeII", "xHeIII"])
 
@@ -99,7 +94,7 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
     meanDenHeI = np.zeros((nstars, Npixel))  # Neutral He column density
     meanDenHeII = np.zeros((nstars, Npixel))  # Column density of HeII
 
-    maximum_points = int(1e8) # total memory: 800 MB
+    maximum_points = int(num_of_points_per_process) # total memory: 800 MB
     num_of_stars_per_loop = min(int(maximum_points / (Npixel * nsample)), nstars)
     assert num_of_stars_per_loop > 0, (f"num_of_star_per_loop must be greater than 0. nstars "
                                        "= {nstars}, Npixel = {Npixel}, nsample = {nsample}")
@@ -119,7 +114,7 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
             for i_pixel in range(Npixel):
                 itheta = theta[i_pixel]
                 iphi = phi[i_pixel]
-                radius = np.random.random(nsample) * (radius_end - star_surf) + star_surf
+                radius = np.random.random(nsample) * (ray_end - ray_start) + ray_start
                 points[i_star, i_pixel, :, 0] = radius * sin(itheta) * cos(iphi) + rad_center[0]
                 points[i_star, i_pixel, :, 1] = radius * sin(itheta) * sin(iphi) + rad_center[1]
                 points[i_star, i_pixel, :, 2] = radius * cos(itheta) + rad_center[2]
@@ -174,8 +169,8 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
         count_start = count_end
         count_end = min(count_end + num_of_stars_per_loop, nstars)
 
-    # length = boxlen * (radius_end - star_surf)
-    length = (radius_end - star_surf)
+    # length = boxlen * (ray_end - ray_start)
+    length = (ray_end - ray_start)
     coeff = length * unit_col_den
     return meanDenHI * coeff, meanDenHeI * coeff, meanDenHeII * coeff
         

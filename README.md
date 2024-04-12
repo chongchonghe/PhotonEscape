@@ -35,6 +35,8 @@ make cython
 make
 export PYTHONPATH=$PYTHONPATH:$PYMSESDIR/pymses_python3
 
+# install yt
+
 echo "Add the following to your .bashrc/.zshrc or to your project setup script"
 echo ""
 echo "export PYTHONPATH=\$PYTHONPATH:$PYMSESDIR/pymses_python3"
