@@ -4,6 +4,46 @@
 
 1. Install pymses. The following script works only on macOS because it uses brew to install hdf5 but brew is only availble on macOS. For linux clusters, you need to `module load` hdf5. 
 
+On Zaratan: 
+
+After each 'pip install', you may see some dependency errors, but as long as you see `Successfully installed ... PACKAGE-x.x.x`, it means the package is successfully installed and you can ignore the warnings/errors. 
+
+```sh
+PYMSESDIR=~/softwares/pymses
+
+module load hdf5
+module load python/3.8.12
+# unset PYTHONPATH so that the system-wide python packages won't be seen
+export PYTHONPATH=
+mkdir -p ${PYMSESDIR}/python
+cd ${PYMSESDIR}/python
+python -m venv pymses
+source pymses/bin/activate
+# ensure this returns the correct python path: ./pymses/bin/python
+which python
+python -m pip install --upgrade pip
+# Install yt
+python -m pip install yt
+# Check yt installation: this shouldn't return error if yt is properly installed
+python -c 'import yt'
+# Install other required packages
+python -m pip install numpy scipy matplotlib ipython h5py tables astropy healpy nose
+# Or, if there is dependency conflict, install the following versions of astropy and healpy
+# pip install astropy==5.2.2 healpy==1.16.5
+
+# Clone and install pymses
+cd $PYMSESDIR
+git clone https://github.com/chongchonghe/pymses_python3.git
+cd pymses_python3
+make cython
+# You should see zero error messages from previous command, otherwise it's a failure. If make is successful, the last line of the printing should be something like 'make[1]: Leaving directory '/home/che1234/softwares/pymses/pymses_python3'
+make
+export PYTHONPATH=$PYMSESDIR/pymses_python3
+# You should add the previous command into your .bashrc or your project setup script
+```
+
+On macOS:
+
 ```sh
 # Set the directory where pymses will be installed
 PYMSESDIR=~/softwares/pymses
@@ -36,6 +76,7 @@ make
 export PYTHONPATH=$PYTHONPATH:$PYMSESDIR/pymses_python3
 
 # install yt
+conda install --channel conda-forge yt
 
 echo "Add the following to your .bashrc/.zshrc or to your project setup script"
 echo ""
@@ -43,14 +84,9 @@ echo "export PYTHONPATH=\$PYTHONPATH:$PYMSESDIR/pymses_python3"
 ```
 
 2. Clone this repo
-
-3. Copy (or symbolic link) the snapshot to `data/cluster/output_00273`
-
-4. Run the test in this folder: `python test.py`
-
-5. To use this module in your script. Then, add the `./src` folder to `PYTHONPATH` by `export PYTHONPATH=$PYTHONPATH:PATH-TO-THIS-REPO/src`. Then, you can write script like in test.py. Or, use the script I wrote, `loop_fred_sims.py`, to fast-process Fred's simulation. Run `python loop_fred_sims.py -h` for help message. The general routine is to do `python loop_fred_sims.py process path-to-sim-data` followed by `python loop_fred_sims.py fesc path-to-sim-data`. You can copy loop_fred_sims.py to your folder and do your own tweaking. 
-
-6. Note: you need to copy pymses_field_descrs.py to your working folder in order to let Pymses read the right fields. 
+3. Do `export PYTHONPATH=$PYTHONPATH:PATH-TO-THIS-REPO/src`. 
+4. Run the test in this folder: `python test.py` . You should see `Test passed.` in the end. 
+5. You can use this module in your own python script. See examples in test.py. Or, use the script I wrote, `loop_fred_sims.py`, to fast-process Fred's simulation. First a test run, you can run the following commands in this folder. For production run, copy `loop_fred_sims.py` and `pymses_field_descrs.py` to your working directory (preferably on scratch because the code will generate lots of data). Then, run `python loop_fred_sims.py process path-to-sim-data` followed by `python loop_fred_sims.py fesc path-to-sim-data`. For available command line options, do `python loop_fred_sims.py -h`. 
 
 ## About the fields
 
