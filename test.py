@@ -18,20 +18,20 @@ fesc.DEBUG = DEBUG
 
 def test_and_benchmark():
 
-    # Aquarius_dir = "./data/Aquarius"
-    # if not os.path.exists(Aquarius_dir):
-    #     os.makedirs(Aquarius_dir, exist_ok=True)
-    #     print("Aquarius data not found. Do you want to download it (900MB)? (y/n)")
-    #     if input().lower() == "y":
-    #         os.system("wget http://irfu.cea.fr/Projets/coast_documents/Aquarius.tar.gz -O ./data/Aquarius.tar.gz")
-    #         os.system("tar -xzf ./data/Aquarius.tar.gz -C ./data")
-    # jobdir = os.path.join(Aquarius_dir, "output")
-    # out = 193
+    Aquarius_dir = "./data/Aquarius"
+    if not os.path.exists(Aquarius_dir):
+        os.makedirs(Aquarius_dir, exist_ok=True)
+        print("Aquarius data not found. Do you want to download it (900MB)? (y/n)")
+        if input().lower() == "y":
+            os.system("wget http://irfu.cea.fr/Projets/coast_documents/Aquarius.tar.gz -O ./data/Aquarius.tar.gz")
+            os.system("tar -xzf ./data/Aquarius.tar.gz -C ./data")
+    jobdir = os.path.join(Aquarius_dir, "output")
+    out = 193
 
-    jobdir = "data/cluster"
-    out = 273
-    if not os.path.exists(f"{jobdir}/output_{out:05d}"):
-        sys.exit(f"Error: {jobdir}/output_{out:05d} does not exist. Please place the data there first (or symbolic link to the data folder)")
+    # jobdir = "data/cluster"
+    # out = 273
+    # if not os.path.exists(f"{jobdir}/output_{out:05d}"):
+    #     sys.exit(f"Error: {jobdir}/output_{out:05d} does not exist. Please place the data there first (or symbolic link to the data folder)")
 
     try:
         ro = RamsesOutput(jobdir, out)
