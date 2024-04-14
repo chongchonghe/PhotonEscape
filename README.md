@@ -83,7 +83,7 @@ echo ""
 echo "export PYTHONPATH=\$PYTHONPATH:$PYMSESDIR/pymses_python3"
 ```
 
-2. Clone this repo
+2. Clone this repo into your project directory: `git clone https://github.com/chongchonghe/PhotonEscape.git`
 3. Do `export PYTHONPATH=$PYTHONPATH:PATH-TO-THIS-REPO/src`. 
 4. Run the test in this folder: `python test.py` . You should see `Test passed.` in the end. 
 5. You can use this module in your own python script. See examples in test.py. Or, use the script I wrote, `loop_fred_sims.py`, to fast-process Fred's simulation. First a test run, you can run the following commands in this folder. For production run, copy `loop_fred_sims.py` and `pymses_field_descrs.py` to your working directory (preferably on scratch because the code will generate lots of data). Then, run `python loop_fred_sims.py process path-to-sim-data` followed by `python loop_fred_sims.py fesc path-to-sim-data`. For available command line options, do `python loop_fred_sims.py -h`. 
