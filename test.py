@@ -16,6 +16,72 @@ DEBUG = 0
 fesc.DEBUG = DEBUG
 
 
+def test_and_benchmark_cloud_data():
+
+    Aquarius_dir = "./data/Aquarius"
+    if not os.path.exists(Aquarius_dir):
+        os.makedirs(Aquarius_dir, exist_ok=True)
+        print("Aquarius data not found. Do you want to download it (900MB)? (y/n)")
+        if input().lower() == "y":
+            os.system("wget http://irfu.cea.fr/Projets/coast_documents/Aquarius.tar.gz -O ./data/Aquarius.tar.gz")
+            os.system("tar -xzf ./data/Aquarius.tar.gz -C ./data")
+    jobdir = os.path.join(Aquarius_dir, "output")
+    out = 193
+
+    try:
+        ro = RamsesOutput(jobdir, out)
+    except ValueError:
+        print("myError: can't find the output folder:")
+        print(f"{jobdir}/output_{out:05d}")
+        raise SystemExit
+
+    N = 9
+    source = ro.amr_source(["rho", "xHII", "xHeII", "xHeIII"])
+    dots = np.ones((N, 3)) * 0.5
+    dots[:, 2] = np.linspace(0.1, 0.9, N, endpoint=True)
+
+    sp = sample_points(source, dots)
+
+    rho = sp.fields['rho']
+    xHII = sp.fields['xHII']
+    xHeII = sp.fields['xHeII']
+    xHeIII = sp.fields['xHeIII']
+
+    print("rho =")
+    print(rho)
+    print("xHII =")
+    print(xHII)
+
+    t1 = time()
+    sp = sample_points(source, dots)
+    print(f"N = {N}, Time taken: ", time() - t1, "s")
+
+    N = 1000
+    dots = np.ones((N, 3)) * 0.5
+    dots[:, 2] = np.linspace(0.1, 0.9, N, endpoint=True)
+    t1 = time()
+    sp = sample_points(source, dots)
+    print(f"N = {N}, Time taken: ", time() - t1, "s")
+
+    N = 10000000
+    dots = np.ones((N, 3)) * 0.5
+    dots[:, 2] = np.linspace(0.1, 0.9, N, endpoint=True)
+    t1 = time()
+    sp = sample_points(source, dots)
+    print(f"N = {N:.1e}, linear sequential sample, Time taken: ", time() - t1, "s")
+
+    N = 10000000
+    dots = np.random.random((N, 3))
+    t1 = time()
+    sp = sample_points(source, dots)
+    print(f"N = {N:.1e}, random sample, Time taken: ", time() - t1, "s")
+
+    print("Test passed.")
+
+    return 
+
+
+
 def test_and_benchmark():
 
     Aquarius_dir = "./data/Aquarius"
@@ -268,6 +334,7 @@ def test_cluster():
 
 if __name__ == "__main__":
     
-    test_and_benchmark()
+    test_and_benchmark_cloud_data()
+    # test_and_benchmark()
     # test_chongchong()
     # test_cluster()
