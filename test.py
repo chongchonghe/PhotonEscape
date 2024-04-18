@@ -268,6 +268,6 @@ def test_cluster():
 
 if __name__ == "__main__":
     
-    # test_and_benchmark()
+    test_and_benchmark()
     # test_chongchong()
-    test_cluster()
+    # test_cluster()
