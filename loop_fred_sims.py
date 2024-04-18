@@ -199,7 +199,7 @@ def compute_fesc(args):
         # weights = luminosity * 1e-44
         weights = np.ones(len(star_mass))
         fesc1_sky_weighted = np.dot(weights, fesc_HI) / np.sum(weights)
-        fesc.plot_sky(fesc1_sky_weighted, vmin=-2, vmax=0, is_log=True, fn="./sky-cluster")
+        fesc.plot_sky(fesc1_sky_weighted, vmin=-6, vmax=0, is_log=True, fn="./sky-cluster")
 
 
 if __name__ == "__main__":
