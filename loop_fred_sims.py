@@ -173,6 +173,8 @@ def compute_fesc(args):
         fesc_HI = data["fesc_HI"]
         fesc_HeI = data["fesc_HeI"]
         fesc_HeII = data["fesc_HeII"]
+        star_mass = data["star_mass"]
+        star_pos = data["star_pos"]
 
         # print("fesc_HI.shape", fesc_HI.shape)
         # print("fesc_HI.max, min, mean =", fesc_HI.max(), fesc_HI.min(), fesc_HI.mean())
@@ -191,6 +193,13 @@ def compute_fesc(args):
         print(f"Output {out:05d} with {n_star} stars:")
         print("Sky-mean escape fraction for HI, HII, HeII:", fesc_HI_star_and_sky_mean, fesc_HeI_star_and_sky_mean, fesc_HeII_star_and_sky_mean)
         print("Sky-standard deviation for HI, HII, HeII:", fesc_HI_star_and_sky_std, fesc_HeI_star_and_sky_std, fesc_HeII_star_and_sky_std)
+
+        #----- plot the sky map: luminosity weighted escape fraction -----
+        # luminosity = fesc.QVacca(star_mass)
+        # weights = luminosity * 1e-44
+        weights = np.ones(len(star_mass))
+        fesc1_sky_weighted = np.dot(weights, fesc_HI) / np.sum(weights)
+        fesc.plot_sky(fesc1_sky_weighted, vmin=-2, vmax=0, is_log=True, fn="./sky-cluster")
 
 
 if __name__ == "__main__":
