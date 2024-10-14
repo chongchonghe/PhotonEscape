@@ -27,7 +27,7 @@ def arg_parser():
     parser.add_argument("--nsample", type=int, nargs="?", default=100, help="Number of Monte Carlo sampling points for each light beam. Default: 100")
     parser.add_argument("--refine", type=int, nargs="?", default=0, help="The number of spatial directions will be 12 * 4^refine. Default: 0")
     parser.add_argument("--dist", type=str, nargs="?", default="1", help="The distance to do ray tracing. Dimensionless numbers will be the fraction to the box size. Default: 1. Examples: '1', '1.5_kpc'")
-    parser.add_argument("--subsample", type=float, default=1.0, help="Sub-sampling fraction for the star particles. Default: 1.0")
+    parser.add_argument("--subsample", type=float, default=0.01, help="Sub-sampling fraction for the star particles. Default: 1.0")
     parser.add_argument("--max_samples", type=int, default=int(1e8), help="The maximum number of samples to do per process. The default is 1e8, which results in 3.2 GB memory usage per process. Increasing this number will increase the speed but also the memory usage linearly.")
     return parser.parse_args()
 

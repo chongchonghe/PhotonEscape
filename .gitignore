@@ -1,5 +1,7 @@
 # -*- mode: gitignore; -*-
 
+.vscode/
+
 /data/
 *.png
 *.pdf

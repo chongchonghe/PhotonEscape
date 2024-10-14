@@ -334,7 +334,20 @@ def test_cluster():
 
 if __name__ == "__main__":
     
-    test_and_benchmark_cloud_data()
-    # test_and_benchmark()
-    # test_chongchong()
-    # test_cluster()
+    if len(sys.argv) < 2:
+        test_and_benchmark_cloud_data()
+        test_and_benchmark()
+        test_chongchong()
+        test_cluster()
+    else:
+        arg = sys.argv[1].lower()
+        if arg == "cloud":
+            test_and_benchmark_cloud_data()
+        elif arg == "bench":
+            test_and_benchmark()
+        elif arg == "chongchong":
+            test_chongchong()
+        elif arg == "cluster":
+            test_cluster()
+        else:
+            print(f"Unknown argument: {arg}.")
