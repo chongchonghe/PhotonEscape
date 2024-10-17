@@ -217,7 +217,10 @@ def compute_weighted_fesc(tau, weights):
     return fesc_weighted
 
 
-def plot_sky(fesc, vmin=-2, vmax=0, is_log=True, fn="./sky"):
+def plot_sky(fesc, vmin=-2, vmax=0, is_log=True, fn="./sky", axis_on=False):
+
+    # set elements in fesc below 10**vmin to 10**(vmin-1)
+    fesc[fesc < 10**vmin] = 10**(vmin-1)
     
     if is_log:
         z = np.log10(fesc)
@@ -230,13 +233,14 @@ def plot_sky(fesc, vmin=-2, vmax=0, is_log=True, fn="./sky"):
     f, ax = plt.subplots()
     cmap = plt.cm.viridis
     cmap.set_under('k')
-    # cmap.set_bad('k')
+    # cmap.set_bad('r')
     im = ax.imshow(sky_im_arr, cmap=cmap, vmin=vmin, vmax=vmax)
 
     # adjust ax and add a colorbar on the bottom
     f.subplots_adjust(bottom=0.1, top=0.98, left=0.02, right=0.98)
     # hide the axes
-    ax.axis('off')
+    if not axis_on:
+        ax.axis('off')
     cax = f.add_axes([0.2, 0.15, 0.6, 0.02])
     cb = f.colorbar(im, cax=cax, orientation='horizontal')
     cb.ax.tick_params(labelsize='small')
