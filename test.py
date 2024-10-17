@@ -210,7 +210,7 @@ def test_chongchong():
     #-----  compute column density  -----
     sampleNum = 100
     nsidePow = 2
-    col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(ro, stars, nsidePow=nsidePow, nsample=sampleNum,
+    col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(ro, stars, n_angular_refine=nsidePow, nsample=sampleNum,
                                                                 H_fraction=0.76, He_fraction=0.24, seed=333)
     col1 = np.mean(col_1, axis=0) # average over stars
     print("\nThe column density, averaged over stars, has the following min, max, and mean values (g cm^-2) across the space:")
@@ -300,7 +300,7 @@ def test_cluster():
     sampleNum = 100
     nsidePow = 0
     col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(
-        ro, star_pos, nsidePow=nsidePow, nsample=sampleNum, H_fraction=0.76, He_fraction=0.24, seed=333)
+        ro, star_pos, n_angular_refine=nsidePow, nsample=sampleNum, H_fraction=0.76, He_fraction=0.24, seed=333)
     col1 = np.mean(col_1, axis=0) # average over stars
     print("\nThe column density, averaged over stars, has the following min, max, and mean values (g cm^-2) across the space:")
     print(col1.min(), col1.max(), col1.mean())
