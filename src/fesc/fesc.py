@@ -21,7 +21,23 @@ MH = 1.6733e-24         # g
 Kappa_HI = Sigma_HI / MH
 Kappa_HeI = Kappa_HI * (24.6 / 13.6)**-3
 Kappa_HeII = Kappa_HI * (54.4 / 13.6)**-3
-OPACITIES = {"HI": Kappa_HI, "HeI": Kappa_HeI, "HeII": Kappa_HeII}
+# assuming H2 opacity is half as HI (same cross section per particle)
+Kappa_H2 = Kappa_HI / 2
+OPACITIES = {"HI": Kappa_HI, "HeI": Kappa_HeI, "HeII": Kappa_HeII, "H2": Kappa_H2}
+
+
+# temporary; not accurate
+def compute_HI_ion_optial_depth(colden_H2: np.ndarray, colden_HI: np.ndarray, colden_HeI: np.ndarray, colden_HeII: np.ndarray):
+    
+    tau0 = colden_H2 * Kappa_H2
+    tau1 = colden_HI * Kappa_HI
+    return tau0 + tau1
+
+# temporary; not correct
+def compute_HeI_ion_optial_depth(colden_H2: np.ndarray, colden_HI: np.ndarray, colden_HeI: np.ndarray, colden_HeII: np.ndarray):
+    
+    tau = colden_HeI * Kappa_HeI
+    return tau
 
 
 def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine, nsample, H_fraction, He_fraction, seed=None,
@@ -40,9 +56,10 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
         
     Returns:
     --------
+    colDenH2: np.ndarray
+        The molecular hydrogen column density. The shape is (nstars, Npixel). The unit is g/cm^2.
     colDenHI: np.ndarray
-        The neutral hydrogen column density. The shape is (nstars, Npixel). 
-        The unit is g/cm^2.
+        The neutral hydrogen column density. The shape is (nstars, Npixel).  The unit is g/cm^2.
     colDenHeI: np.ndarray
         The neutral helium column density. The shape is (nstars, Npixel)
     colDenHeII: np.ndarray
@@ -76,7 +93,7 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
     if DEBUG > 0:
         ray_end = 0.1
 
-    source = ro.amr_source(["rho", "xHII", "xHeII", "xHeIII"])
+    source = ro.amr_source(["rho", "xHI", "xHII", "xHeII", "xHeIII"])
 
     # healpy stuff
     nside = 2**n_angular_refine            # nside = 2**integer
@@ -90,6 +107,7 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
     tot_sample = nstars * Npixel * nsample
 
     # output container
+    meanDenH2 = np.zeros((nstars, Npixel))  # H2 column density
     meanDenHI = np.zeros((nstars, Npixel))  # Neutral H column density
     meanDenHeI = np.zeros((nstars, Npixel))  # Neutral He column density
     meanDenHeII = np.zeros((nstars, Npixel))  # Column density of HeII
@@ -128,6 +146,7 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
             sys.stdout = open(os.devnull, "w")
             sp = sample_points(source, dots)
             rho = sp.fields['rho']
+            xHI = sp.fields['xHI'] * H_fraction
             xHII = sp.fields['xHII'] * H_fraction
             xHeII = sp.fields['xHeII'] * He_fraction
             xHeIII = sp.fields['xHeIII'] * He_fraction
@@ -148,7 +167,9 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
 
         assert xHII.max() <= 1.0, f"xHII.max() = {xHII.max()}"
         assert xHII.min() >= 0.0, f"xHII.min() = {xHII.min()}"
-        xHI = H_fraction - xHII
+        assert xHeII.max() <= 1.0, f"xHeII.max() = {xHeII.max()}"
+        assert xHeII.min() >= 0.0, f"xHeII.min() = {xHeII.min()}"
+        xH2 = H_fraction - xHI - xHII
         xHeI = He_fraction - xHeII - xHeIII
 
         # Set the density of the dots outside the box to 0
@@ -162,6 +183,7 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
             for i_pixel in range(Npixel):
                 idx_1 = (i_star * Npixel + i_pixel) * nsample
                 idx_2 = (i_star * Npixel + i_pixel + 1) * nsample
+                meanDenH2[i_star_global, i_pixel] = np.mean(rho[idx_1:idx_2] * xH2[idx_1:idx_2])
                 meanDenHI[i_star_global, i_pixel] = np.mean(rho[idx_1:idx_2] * xHI[idx_1:idx_2])
                 meanDenHeI[i_star_global, i_pixel] = np.mean(rho[idx_1:idx_2] * xHeI[idx_1:idx_2])
                 meanDenHeII[i_star_global, i_pixel] = np.mean(rho[idx_1:idx_2] * xHeII[idx_1:idx_2])
@@ -172,7 +194,7 @@ def col_den_all_stars_and_directions(ro, star_pos: np.ndarray, n_angular_refine,
     # length = boxlen * (ray_end - ray_start)
     length = (ray_end - ray_start)
     coeff = length * unit_col_den
-    return meanDenHI * coeff, meanDenHeI * coeff, meanDenHeII * coeff
+    return meanDenH2 * coeff, meanDenHI * coeff, meanDenHeI * coeff, meanDenHeII * coeff
         
 
 def compute_angular_fesc(col_den: np.ndarray, kappa: float):

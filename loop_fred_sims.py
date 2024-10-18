@@ -16,9 +16,10 @@ from fesc import fesc
 
 DEBUG = 0
 fesc.DEBUG = DEBUG
+INCLUDE_He = 0
 
 ONLY_ALIVE = 1
-MAX_AGE = 10.0 # Myr
+MAX_AGE = 30.0 # Myr
 
 # from Fred's code: tools/cosmos.py
 def code_age_to_myr(all_star_ages, hubble_const, unique_age=True, true_age=False):
@@ -86,7 +87,7 @@ def arg_parser():
     parser.add_argument("task", type=str, help="Task to do: 'process', 'fesc', or 'process_and_fesc'")
     parser.add_argument("jobdir", type=str, help="The simulation data directory")
     parser.add_argument("--output", type=int, nargs="?", help="the output to process. Default: all outputs in the jobdir")
-    parser.add_argument("--outdir", type=str, default="outs", help="the directory for output figures")
+    parser.add_argument("--outdir", type=str, default="outs", help="the directory for output figures.")
     parser.add_argument("--nsample", type=int, nargs="?", default=100, help="Number of Monte Carlo sampling points for each light beam. Default: 100")
     parser.add_argument("--refine", type=int, nargs="?", default=0, help="The number of spatial directions will be 12 * 4^refine. Default: 0")
     parser.add_argument("--dist", type=str, nargs="?", default="1", help="The distance to do ray tracing. Dimensionless numbers will be the fraction to the box size. Default: 1. Examples: '1', '1.5_kpc'")
@@ -183,30 +184,37 @@ def process_outputs(args):
         n_directions = 12 * 4**refine
         print("Processing output", out, "with", sampleNum, "samples and", n_directions, "angular directions")
         t0 = time()
-        col_1, col_2, col_3 = fesc.col_den_all_stars_and_directions(
+        col_H2, col_HI, col_HeI, col_HeII = fesc.col_den_all_stars_and_directions(
             ro, star_pos, n_angular_refine=refine, nsample=sampleNum, H_fraction=0.76, He_fraction=0.24, 
             ray_start=0.0, ray_end=dist, seed=333)
         dt = time() - t0
         print(f"Done processing. Time taken = {dt:.2f} s")
 
-        #----- compute the escape fraction for all directions from all stars  -----
-        # The dimensions of tau_HI are (n_star, n_directions)
-        kappa_HI = fesc.OPACITIES["HI"]
-        tau_HI = col_1 * kappa_HI
-        fesc_HI = np.exp(-tau_HI)
-        kappa_HeI = fesc.OPACITIES["HeI"]
-        tau_HeI = col_2 * kappa_HeI
-        fesc_HeI = np.exp(-tau_HeI)
-        kappa_HeII = fesc.OPACITIES["HeII"]
-        tau_HeII = col_3 * kappa_HeII
-        fesc_HeII = np.exp(-tau_HeII)
-        
         #----- save the results  -----
-        outdir = f"{jobdir}/processed/fesc"
+        outdir = f"{jobdir}/processed/colden"
         os.makedirs(outdir, exist_ok=True)
-        outpath = f"{outdir}/fesc_{out:05d}.npz"
-        # save: the escape fraction for all stars and all directions; star masses (Msun); star positions (code_length)
-        np.savez(outpath, fesc_HI=fesc_HI, fesc_HeI=fesc_HeI, fesc_HeII=fesc_HeII, star_mass=star_mass, star_pos=star_pos, star_age=star_age)
+        outpath = f"{outdir}/colden_{out:05d}.npz"
+        # save column density for all stars and all directions, star masses (Msun), and star positions (code_length)
+        np.savez(outpath, col_H2=col_H2, col_HI=col_HI, col_HeI=col_HeI, col_HeII=col_HeII, star_mass=star_mass, star_pos=star_pos, star_age=star_age)
+
+        # #----- compute the escape fraction for all directions from all stars  -----
+        # # The dimensions of tau_HI are (n_star, n_directions)
+        # kappa_HI = fesc.OPACITIES["HI"]
+        # tau_HI = col_1 * kappa_HI
+        # fesc_HI = np.exp(-tau_HI)
+        # kappa_HeI = fesc.OPACITIES["HeI"]
+        # tau_HeI = col_2 * kappa_HeI
+        # fesc_HeI = np.exp(-tau_HeI)
+        # kappa_HeII = fesc.OPACITIES["HeII"]
+        # tau_HeII = col_3 * kappa_HeII
+        # fesc_HeII = np.exp(-tau_HeII)
+        
+        # #----- save the results  -----
+        # outdir = f"{jobdir}/processed/fesc"
+        # os.makedirs(outdir, exist_ok=True)
+        # outpath = f"{outdir}/fesc_{out:05d}.npz"
+        # # save: the escape fraction for all stars and all directions; star masses (Msun); star positions (code_length)
+        # np.savez(outpath, fesc_HI=fesc_HI, fesc_HeI=fesc_HeI, fesc_HeII=fesc_HeII, star_mass=star_mass, star_pos=star_pos, star_age=star_age)
     
     return
 
@@ -239,41 +247,55 @@ def compute_fesc(args):
         print("\nFound the following outputs:", outs[:100], "...", outs[-3:])
 
     for out in outs:
-        outpath = f"{jobdir}/processed/fesc/fesc_{out:05d}.npz"
+        outpath = f"{jobdir}/processed/colden/colden_{out:05d}.npz"
         if not os.path.exists(outpath):
             print(f"Error: {outpath} does not exist. Do data process first. Skipping...")
             continue
         data = np.load(outpath)
-        fesc_HI = data["fesc_HI"] # shape: (n_star, n_directions)
-        fesc_HeI = data["fesc_HeI"]
-        fesc_HeII = data["fesc_HeII"]
+        col_H2 = data["col_H2"] # shape: (n_star, n_directions)
+        col_HI = data["col_HI"] # shape: (n_star, n_directions)
+        col_HeI = data["col_HeI"]
+        col_HeII = data["col_HeII"]
         star_mass = data["star_mass"]
         star_pos = data["star_pos"]
         star_age = data["star_age"]
-        n_star = fesc_HI.shape[0]
+        n_star = col_HI.shape[0]
 
         is_alive = np.array(star_age < MAX_AGE, dtype=int)      # shape: (n_star,)
 
-        # print("fesc_HI.shape", fesc_HI.shape)
-        # print("fesc_HI.max, min, mean =", fesc_HI.max(), fesc_HI.min(), fesc_HI.mean())
-        # return
+        #----- compute the escape fraction for all directions from all stars  -----
+        # The dimensions of tau_HI are (n_star, n_directions)
+        tau_HI = fesc.compute_HI_ion_optial_depth(col_H2, col_HI, col_HeI, col_HeII)
+        fesc_HI = np.exp(-tau_HI)
+        if INCLUDE_He:
+            tau_HeI = col_HeI * fesc.OPACITIES["HeI"]
+            fesc_HeI = np.exp(-tau_HeI)
+            tau_HeII = col_HeII * fesc.OPACITIES["HeII"]
+            fesc_HeII = np.exp(-tau_HeII)
         
         if not ONLY_ALIVE: # all stars 
             fesc_HI_star_mean = np.mean(fesc_HI, axis=0)        # shape: (n_directions,)
-            fesc_HeI_star_mean = np.mean(fesc_HeI, axis=0)      # shape: (n_directions,)
-            fesc_HeII_star_mean = np.mean(fesc_HeII, axis=0)    # shape: (n_directions,)
+            if INCLUDE_He:
+                fesc_HeI_star_mean = np.mean(fesc_HeI, axis=0)      # shape: (n_directions,)
+                fesc_HeII_star_mean = np.mean(fesc_HeII, axis=0)    # shape: (n_directions,)
         else: # only alive stars
             is_alive_expanded = is_alive[:, None]
             fesc_HI_star_mean = np.mean(fesc_HI * is_alive_expanded, axis=0)
-            fesc_HeI_star_mean = np.mean(fesc_HeI * is_alive_expanded, axis=0)
-            fesc_HeII_star_mean = np.mean(fesc_HeII * is_alive_expanded, axis=0)
+            if INCLUDE_He:
+                fesc_HeI_star_mean = np.mean(fesc_HeI * is_alive_expanded, axis=0)
+                fesc_HeII_star_mean = np.mean(fesc_HeII * is_alive_expanded, axis=0)
 
         fesc_HI_star_and_sky_mean = np.mean(fesc_HI_star_mean)
-        fesc_HeI_star_and_sky_mean = np.mean(fesc_HeI_star_mean)
-        fesc_HeII_star_and_sky_mean = np.mean(fesc_HeII_star_mean)
         fesc_HI_star_and_sky_std = np.std(fesc_HI_star_mean)
-        fesc_HeI_star_and_sky_std = np.std(fesc_HeI_star_mean)
-        fesc_HeII_star_and_sky_std = np.std(fesc_HeII_star_mean)
+        fesc_HeI_star_and_sky_mean = None
+        fesc_HeII_star_and_sky_mean = None
+        fesc_HeI_star_and_sky_std = None
+        fesc_HeII_star_and_sky_std = None
+        if INCLUDE_He:
+            fesc_HeI_star_and_sky_mean = np.mean(fesc_HeI_star_mean)
+            fesc_HeII_star_and_sky_mean = np.mean(fesc_HeII_star_mean)
+            fesc_HeI_star_and_sky_std = np.std(fesc_HeI_star_mean)
+            fesc_HeII_star_and_sky_std = np.std(fesc_HeII_star_mean)
 
         print(f"Output {out:05d} with {n_star} stars:")
         print("Sky-mean escape fraction for HI, HII, HeII:", fesc_HI_star_and_sky_mean, fesc_HeI_star_and_sky_mean, fesc_HeII_star_and_sky_mean)
@@ -282,9 +304,22 @@ def compute_fesc(args):
         #----- plot the sky map: luminosity weighted escape fraction -----
         # luminosity = fesc.QVacca(star_mass)
         # weights = luminosity * 1e-44
+    
+        # plot HI
         weights = np.ones(len(star_mass))
         fesc1_sky_weighted = np.dot(weights, fesc_HI) / np.sum(weights)
-        fesc.plot_sky(fesc1_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-cluster", axis_on=0)
+        fesc.plot_sky(fesc1_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out:05d}-HI", axis_on=0)
+
+        if INCLUDE_He:
+            # plot HeI
+            fesc2_sky_weighted = np.dot(weights, fesc_HeI) / np.sum(weights)
+            fesc.plot_sky(fesc2_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out:05d}-HeI", axis_on=0)
+            
+            # plot HeII
+            fesc3_sky_weighted = np.dot(weights, fesc_HeII) / np.sum(weights)
+            fesc.plot_sky(fesc3_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out:05d}-HeII", axis_on=0)
+
+        print(f"Sky map saved to {out_dir}/sky-cluster-xxx.png")
 
 
 if __name__ == "__main__":

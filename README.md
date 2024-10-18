@@ -1,5 +1,9 @@
 # Ionizing photon escape calculation
 
+## TODOs
+
+- Use a precise model for ionising photon cross section. References: Rosdahl+2013, appendix E4
+
 ## How to use this module?
 
 1. Install pymses. The following script works only on macOS because it uses brew to install hdf5 but brew is only availble on macOS. For linux clusters, you need to `module load` hdf5. 
