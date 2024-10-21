@@ -3,6 +3,7 @@
 .vscode/
 
 /data/
+/outs/
 *.png
 *.pdf
 /test.log
