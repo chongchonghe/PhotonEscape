@@ -21,6 +21,9 @@ INCLUDE_He = 0
 ONLY_ALIVE = 1
 MAX_AGE = 30.0 # Myr
 
+def get_npz_filename(out_num, ref_level):
+    return f"colden_{out_num:05d}_level{ref_level}.npz"
+
 # from Fred's code: tools/cosmos.py
 def code_age_to_myr(all_star_ages, hubble_const, unique_age=True, true_age=False):
     r"""
@@ -85,38 +88,30 @@ def arg_parser():
     parser = argparse.ArgumentParser(
         description="Calculate the column density in all directions from a single star")
     parser.add_argument("task", type=str, help="Task to do: 'process', 'fesc', or 'process_and_fesc'")
-    parser.add_argument("jobdir", type=str, help="The simulation data directory")
-    parser.add_argument("--output", type=int, nargs="?", help="the output to process. Default: all outputs in the jobdir")
+    parser.add_argument("--input", type=str, nargs='+', required=True, help="The simulation data directories")
     parser.add_argument("--outdir", type=str, default="outs", help="the directory for output figures.")
     parser.add_argument("--nsample", type=int, nargs="?", default=100, help="Number of Monte Carlo sampling points for each light beam. Default: 100")
     parser.add_argument("--refine", type=int, nargs="?", default=0, help="The number of spatial directions will be 12 * 4^refine. Default: 0")
-    parser.add_argument("--dist", type=str, nargs="?", default="1", help="The distance to do ray tracing. Dimensionless numbers will be the fraction to the box size. Default: 1. Examples: '1', '1.5_kpc'")
+    parser.add_argument("--dist", type=str, nargs="?", default="1_kpc", help="The distance to do ray tracing. Dimensionless numbers will be the fraction to the box size. Default: 1. Examples: '1', '1.5_kpc'")
     parser.add_argument("--subsample", type=float, default=0.01, help="Sub-sampling fraction for the star particles. Default: 1.0")
     parser.add_argument("--max_samples", type=int, default=int(1e8), help="The maximum number of samples to do per process. The default is 1e8, which results in 3.2 GB memory usage per process. Increasing this number will increase the speed but also the memory usage linearly.")
     return parser.parse_args()
 
 
-def process_outputs(args):
+def get_all_outputs(outputs):
+    all_outputs = []
+    for input_dir in outputs:
+        if os.path.basename(input_dir).startswith("output_"):
+            try:
+                out_num = int(input_dir.split("_")[-1])
+                input_base_dir = os.path.dirname(input_dir)
+                all_outputs.append((input_base_dir, out_num))
+            except:
+                pass
+    return all_outputs
 
-    jobdir = args.jobdir
-    if args.output is not None:
-        outs = [args.output]
-    else:
-        # Get all the output numbers
-        outs = []
-        for f in os.listdir(jobdir):
-            if f.startswith("output_"):
-                try:
-                    outs.append(int(f.split("_")[1]))
-                except:
-                    pass
-    if len(outs) == 0:
-        sys.exit(f"Error: no output found in {jobdir}")
-    outs.sort()
-    if len(outs) <= 103:
-        print("Found the following outputs:", outs)
-    else:
-        print("Found the following outputs:", outs[:100], "...", outs[-3:])
+
+def process_outputs(args):
 
     cell_fields = [
         "Density",
@@ -141,8 +136,11 @@ def process_outputs(args):
     def tau_to_fesc(tau):
         return np.exp(-tau)
 
-    for out in outs:
-        infopath = f"{jobdir}/output_{out:05d}/info_{out:05d}.txt"
+    all_outputs = get_all_outputs(args.input)
+    for the_output in all_outputs:
+        input_base_dir, out_num = the_output
+
+        infopath = f"{input_base_dir}/output_{out_num:05d}/info_{out_num:05d}.txt"
         ds = yt.load(infopath, fields=cell_fields, extra_particle_fields=epf)
         ad = ds.all_data()
 
@@ -166,7 +164,7 @@ def process_outputs(args):
             star_age = star_age[idx]
 
         t = ds.current_time.in_units("Myr")
-        print(f"\nProcessing snapshot {out:05d}, current time: {t:.2f} Myri, number of stars processed: {len(star_mass)}")
+        print(f"\nProcessing snapshot {out_num:05d}, current time: {t:.2f} Myri, number of stars processed: {len(star_mass)}")
 
         # parse the distance: if it is a number, it is the fraction of the box size, otherwise it is number_unit
         try:
@@ -178,11 +176,11 @@ def process_outputs(args):
             dist = dist.value
         
         #----- compute column density  -----
-        ro = RamsesOutput(jobdir, out)
+        ro = RamsesOutput(input_base_dir, out_num)
         sampleNum = args.nsample
         refine = args.refine
         n_directions = 12 * 4**refine
-        print("Processing output", out, "with", sampleNum, "samples and", n_directions, "angular directions")
+        print("Processing output", out_num, "with", sampleNum, "samples and", n_directions, "angular directions")
         t0 = time()
         col_H2, col_HI, col_HeI, col_HeII = fesc.col_den_all_stars_and_directions(
             ro, star_pos, n_angular_refine=refine, nsample=sampleNum, H_fraction=0.76, He_fraction=0.24, 
@@ -191,9 +189,9 @@ def process_outputs(args):
         print(f"Done processing. Time taken = {dt:.2f} s")
 
         #----- save the results  -----
-        outdir = f"{jobdir}/processed/colden"
+        outdir = f"{input_base_dir}/processed/colden"
         os.makedirs(outdir, exist_ok=True)
-        outpath = f"{outdir}/colden_{out:05d}.npz"
+        outpath = os.path.join(outdir, get_npz_filename(out_num, refine))
         # save column density for all stars and all directions, star masses (Msun), and star positions (code_length)
         np.savez(outpath, col_H2=col_H2, col_HI=col_HI, col_HeI=col_HeI, col_HeII=col_HeII, star_mass=star_mass, star_pos=star_pos, star_age=star_age)
 
@@ -226,28 +224,14 @@ def compute_fesc(args):
         out_dir = args.outdir
         os.makedirs(out_dir, exist_ok=True)
 
-    jobdir = args.jobdir
-    if args.output is not None:
-        outs = [args.output]
-    else:
-        # Get all the output numbers
-        outs = []
-        for f in os.listdir(jobdir):
-            if f.startswith("output_"):
-                try:
-                    outs.append(int(f.split("_")[1]))
-                except:
-                    pass
-    if len(outs) == 0:
-        sys.exit(f"Error: no output found in {jobdir}")
-    outs.sort()
-    if len(outs) <= 103:
-        print("\nFound the following outputs:", outs)
-    else:
-        print("\nFound the following outputs:", outs[:100], "...", outs[-3:])
+    if args.refine is None:
+        sys.exit("Error: refine must be specified")
+    refine = args.refine
 
-    for out in outs:
-        outpath = f"{jobdir}/processed/colden/colden_{out:05d}.npz"
+    all_outputs = get_all_outputs(args.input)
+    for the_output in all_outputs:
+        input_base_dir, out_num = the_output
+        outpath = os.path.join(input_base_dir, "processed/colden", get_npz_filename(out_num, refine))
         if not os.path.exists(outpath):
             print(f"Error: {outpath} does not exist. Do data process first. Skipping...")
             continue
@@ -297,7 +281,7 @@ def compute_fesc(args):
             fesc_HeI_star_and_sky_std = np.std(fesc_HeI_star_mean)
             fesc_HeII_star_and_sky_std = np.std(fesc_HeII_star_mean)
 
-        print(f"Output {out:05d} with {n_star} stars:")
+        print(f"Output {out_num:05d} with {n_star} stars:")
         print("Sky-mean escape fraction for HI, HII, HeII:", fesc_HI_star_and_sky_mean, fesc_HeI_star_and_sky_mean, fesc_HeII_star_and_sky_mean)
         print("Sky-standard deviation for HI, HII, HeII:", fesc_HI_star_and_sky_std, fesc_HeI_star_and_sky_std, fesc_HeII_star_and_sky_std)
 
@@ -308,18 +292,18 @@ def compute_fesc(args):
         # plot HI
         weights = np.ones(len(star_mass))
         fesc1_sky_weighted = np.dot(weights, fesc_HI) / np.sum(weights)
-        fesc.plot_sky(fesc1_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out:05d}-HI", axis_on=0)
+        fesc.plot_sky(fesc1_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out_num:05d}-HI", axis_on=0)
 
         if INCLUDE_He:
             # plot HeI
             fesc2_sky_weighted = np.dot(weights, fesc_HeI) / np.sum(weights)
-            fesc.plot_sky(fesc2_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out:05d}-HeI", axis_on=0)
+            fesc.plot_sky(fesc2_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out_num:05d}-HeI", axis_on=0)
             
             # plot HeII
             fesc3_sky_weighted = np.dot(weights, fesc_HeII) / np.sum(weights)
-            fesc.plot_sky(fesc3_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out:05d}-HeII", axis_on=0)
+            fesc.plot_sky(fesc3_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out_num:05d}-HeII", axis_on=0)
 
-        print(f"Sky map saved to {out_dir}/sky-cluster-xxx.png")
+        print(f"Sky map saved to {out_dir}/sky-output{out_num:05d}-xx.png")
 
 
 if __name__ == "__main__":

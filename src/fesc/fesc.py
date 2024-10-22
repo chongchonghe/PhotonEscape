@@ -256,7 +256,7 @@ def plot_sky(fesc, vmin=-2, vmax=0, is_log=True, fn="./sky", axis_on=False):
     cmap = plt.cm.viridis
     cmap.set_under('k')
     # cmap.set_bad('r')
-    im = ax.imshow(sky_im_arr, cmap=cmap, vmin=vmin, vmax=vmax)
+    im = ax.imshow(sky_im_arr, cmap=cmap, vmin=vmin, vmax=vmax, origin='lower')
 
     # adjust ax and add a colorbar on the bottom
     f.subplots_adjust(bottom=0.1, top=0.98, left=0.02, right=0.98)
