@@ -94,7 +94,9 @@ def arg_parser():
     parser.add_argument("--refine", type=int, nargs="?", default=0, help="The number of spatial directions will be 12 * 4^refine. Default: 0")
     parser.add_argument("--dist", type=str, nargs="?", default="1_kpc", help="The distance to do ray tracing. Dimensionless numbers will be the fraction to the box size. Default: 1. Examples: '1', '1.5_kpc'")
     parser.add_argument("--subsample", type=float, default=0.001, help="Sub-sampling fraction for the star particles. Default: 0.001")
-    parser.add_argument("--max_samples", type=int, default=int(1e8), help="The maximum number of samples to do per process. The default is 1e8, which results in 3.2 GB memory usage per process. Increasing this number will increase the speed but also the memory usage linearly.")
+    parser.add_argument("--m_particle", type=float, default=10.0, help="Mass (M_sun) of the stellar particles. Default: 10.0")
+    # turn on splitting a particle into multiple particles by sampling a power-law IMF
+    # parser.add_argument("--split_mass", type=int, default=0, help="Turn on splitting a particle into multiple particles by sampling a Chabrier IMF. Default: 0")
     return parser.parse_args()
 
 
