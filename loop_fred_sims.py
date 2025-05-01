@@ -72,12 +72,12 @@ def get_star_ages(ram_ds, ram_ad, logsfc):
         ram_ad["star", "particle_birth_epoch"],
         current_hubble,
         unique_age=False,
+        true_age=True,
     )
-    birthtime = np.round(converted_unfiltered + birth_start, 3)  #!
+    # birthtime = np.round(converted_unfiltered + birth_start, 3)  #!
+    # hack by CCH: remove birth_start
+    birthtime = np.round(converted_unfiltered, 3)
     current_ages = np.array(np.round(current_time, 3) - np.round(birthtime, 3))
-
-    # hack by CCH: set the youngest star to 0 Myr
-    current_ages -= current_ages.min()
 
     return current_ages
 
@@ -93,7 +93,7 @@ def arg_parser():
     parser.add_argument("--nsample", type=int, nargs="?", default=100, help="Number of Monte Carlo sampling points for each light beam. Default: 100")
     parser.add_argument("--refine", type=int, nargs="?", default=0, help="The number of spatial directions will be 12 * 4^refine. Default: 0")
     parser.add_argument("--dist", type=str, nargs="?", default="1_kpc", help="The distance to do ray tracing. Dimensionless numbers will be the fraction to the box size. Default: 1. Examples: '1', '1.5_kpc'")
-    parser.add_argument("--subsample", type=float, default=0.01, help="Sub-sampling fraction for the star particles. Default: 1.0")
+    parser.add_argument("--subsample", type=float, default=0.001, help="Sub-sampling fraction for the star particles. Default: 0.001")
     parser.add_argument("--max_samples", type=int, default=int(1e8), help="The maximum number of samples to do per process. The default is 1e8, which results in 3.2 GB memory usage per process. Increasing this number will increase the speed but also the memory usage linearly.")
     return parser.parse_args()
 
@@ -137,6 +137,10 @@ def process_outputs(args):
         return np.exp(-tau)
 
     all_outputs = get_all_outputs(args.input)
+    if len(all_outputs) == 0:
+        print("No outputs found!")
+        return
+
     for the_output in all_outputs:
         input_base_dir, out_num = the_output
 
@@ -162,6 +166,10 @@ def process_outputs(args):
             star_mass = star_mass[idx]
             star_pos = star_pos[idx, :]
             star_age = star_age[idx]
+
+        print(star_age.min(), star_age.max())
+        print(star_age)
+        # return
 
         t = ds.current_time.in_units("Myr")
         print(f"\nProcessing snapshot {out_num:05d}, current time: {t:.2f} Myri, number of stars processed: {len(star_mass)}")
@@ -292,18 +300,22 @@ def compute_fesc(args):
         # plot HI
         weights = np.ones(len(star_mass))
         fesc1_sky_weighted = np.dot(weights, fesc_HI) / np.sum(weights)
-        fesc.plot_sky(fesc1_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out_num:05d}-HI", axis_on=0)
+        fn = f"{out_dir}/sky-output{out_num:05d}-HI"
+        fesc.plot_sky(fesc1_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=fn, axis_on=0)
+        print(f"Saved figure {fn}*.png")
 
         if INCLUDE_He:
             # plot HeI
             fesc2_sky_weighted = np.dot(weights, fesc_HeI) / np.sum(weights)
-            fesc.plot_sky(fesc2_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out_num:05d}-HeI", axis_on=0)
+            fn = f"{out_dir}/sky-output{out_num:05d}-HeI"
+            fesc.plot_sky(fesc2_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=fn, axis_on=0)
+            print(f"Saved figure {fn}*.png")
             
             # plot HeII
             fesc3_sky_weighted = np.dot(weights, fesc_HeII) / np.sum(weights)
-            fesc.plot_sky(fesc3_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=f"{out_dir}/sky-output{out_num:05d}-HeII", axis_on=0)
-
-        print(f"Sky map saved to {out_dir}/sky-output{out_num:05d}-xx.png")
+            fn = f"{out_dir}/sky-output{out_num:05d}-HeII"
+            fesc.plot_sky(fesc3_sky_weighted, vmin=-6, vmax=0, is_log=True, fn=fn, axis_on=0)
+            print(f"Saved figure {fn}*.png")
 
 
 if __name__ == "__main__":
